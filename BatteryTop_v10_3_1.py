@@ -39,7 +39,6 @@ from datetime import datetime
 from pathlib import Path
 
 import psutil
-from rich.columns import Columns
 from rich.console import Console, Group
 from rich.live import Live
 from rich.layout import Layout
@@ -1089,11 +1088,12 @@ def build_battery_trend_panel(data):
     table = make_stats_table()
 
     table.add_row("Mode", Text(mode_label(mode), style=mode_color(mode)))
-    table.add_row("Current ETA", format_eta(eta_current))
-    table.add_row("1m Power Model", format_eta(eta_1m))
-    table.add_row("5m Power Model", format_eta(eta_5m))
-    table.add_row("Percent Rate Model", format_eta(eta_rate))
-    table.add_row("Predicted ETA", Text(format_eta(predicted_eta), style="bold magenta"))
+    table.add_row("ETA Current|1min|5min|Rate",(
+            f"{format_eta(eta_current)} | "
+            f"{format_eta(eta_1m)} | "
+            f"{format_eta(eta_5m)} | "
+            f"{format_eta(eta_rate)}"))
+    table.add_row("Predicted", Text(format_eta(predicted_eta), style="bold magenta"))
     table.add_row("Rate", fmt(rate, "%/h", 3))
     table.add_row("Variance", variance_text)
     table.add_row("Confidence", confidence)
@@ -1106,16 +1106,6 @@ def build_battery_trend_panel(data):
 # Session Analytics
 # -----------------------------
 
-def get_session_history(data):
-    if data["mode"] == "charge":
-        return [v for v in charge_history if v is not None], charge_session_started_at, charge_session_start_percent, "green"
-
-    if data["mode"] == "discharge":
-        return [v for v in discharge_history if v is not None], discharge_session_started_at, discharge_session_start_percent, "yellow"
-
-    return [], None, None, "dim"
-
-
 def build_session_analytics_panel(data):
     current = fixed_current_session(data)
     color = mode_color(data.get("mode"))
@@ -1127,18 +1117,22 @@ def build_session_analytics_panel(data):
         table.add_row("Status", "No active charge/discharge session")
         return Panel(table, title="Session Analytics", border_style=color)
 
-    table.add_row("Mode", Text(mode_label(current["mode"]), style=mode_color(current["mode"])))
-    table.add_row("Started", current["started_at"].strftime("%Y-%m-%d %H:%M:%S") if current.get("started_at") else "N/A")
-    table.add_row("Duration", format_elapsed(current.get("started_at")))
-    table.add_row("Start %", fmt(current.get("start_percent"), "%", 3))
-    table.add_row("Current %", fmt(current.get("end_percent"), "%", 3))
-    table.add_row("Delta %", fmt(current.get("delta_percent"), "%", 3))
-    table.add_row("Avg Power", fmt(current.get("avg_power"), "W", 3))
-    table.add_row("Peak Power", fmt(current.get("peak_power"), "W", 3))
-    table.add_row("Min Power", fmt(current.get("min_power"), "W", 3))
-    table.add_row("Samples", str(current.get("samples") or 0))
+    start_percent = current.get("start_percent")
+    current_percent = current.get("current_percent")
+    delta_percent = current.get("delta_percent")
+    started_at = current.get("started_at")
 
-    return Panel(table, title="Session Analytics", border_style=mode_color(current["mode"]))
+    table.add_row("Mode", Text(mode_label(current["mode"]), style=mode_color(current["mode"])))
+    table.add_row("Session", f"{fmt(start_percent, '%', 3)} → {fmt(current_percent, '%', 3)} ({fmt(delta_percent, '%', 3)})")
+    table.add_row("Dur/Avg", f"{format_elapsed(started_at)} | {fmt(current.get('avg_power'), 'W', 3)}")
+    table.add_row("Pk/Min", f"{fmt(current.get('peak_power'), 'W', 3)} | {fmt(current.get('min_power'), 'W', 3)}")
+    table.add_row("Smp", str(current.get("samples") or 0))
+
+    return Panel(
+        table,
+        title="Session Analytics",
+        border_style=mode_color(current["mode"])
+    )
 
 
 
@@ -1300,14 +1294,21 @@ def fmt_delta_percent(value):
 
 
 def add_delta_rows(stats, mode_filter):
-    delta_1m = fmt_delta_percent(battery_percent_delta(1, delta_mode_filter))
-    delta_5m = fmt_delta_percent(battery_percent_delta(5, delta_mode_filter))
-    delta_10m = fmt_delta_percent(battery_percent_delta(10, delta_mode_filter))
-    
-    stats.add_row(
-        "Δ 1/5/10m",
-        f"{delta_1m} | {delta_5m} | {delta_10m}"
-    )
+    delta_1m = fmt_delta_percent(battery_percent_delta(1, mode_filter))
+    delta_5m = fmt_delta_percent(battery_percent_delta(5, mode_filter))
+    delta_10m = fmt_delta_percent(battery_percent_delta(10, mode_filter))
+
+    def compact(value):
+        if value is None:
+            return "N/A"
+
+        text = str(value)
+        return text.replace(" %", "").replace("%", "")
+
+    stats.add_row("Δ 1/5/10m",(
+            f"{compact(delta_1m)} % | "
+            f"{compact(delta_5m)} % | "
+            f"{compact(delta_10m)} %"),)
 
 
 # -----------------------------
@@ -1505,10 +1506,8 @@ def build_battery_panel(data):
     table.add_row("Status", Text(mode_label(data["mode"]), style=mode_color(data["mode"])))
     table.add_row("Battery level", fmt(data["percent"], "%", 3))
     table.add_row("Voltage", fmt(data["voltage_v"], "V", 3))
-    table.add_row("Charge power", fmt(data["charge_power_w"], "W", 3))
-    table.add_row("Discharge power", fmt(data["discharge_power_w"], "W", 3))
-    table.add_row("Avg power 1m", fmt(data["avg_power_1m"], "W", 3))
-    table.add_row("Avg power 5m", fmt(data["avg_power_5m"], "W", 3))
+    table.add_row("Chg/Dischg",(f"{fmt(data['charge_power_w'], 'W', 3)} | "f"{fmt(data['discharge_power_w'], 'W', 3)}"),)
+    table.add_row("Avg Pwr 1m/5m",(f"{fmt(data['avg_power_1m'], 'W', 3)} | "f"{fmt(data['avg_power_5m'], 'W', 3)}"))
     table.add_row("Active current", fmt(data["current_a"], "A", 3))
     table.add_row("Remaining", fmt(data["remaining_wh"], "Wh", 3))
     table.add_row("Full capacity", fmt(data["full_capacity_wh"], "Wh", 3))
@@ -1658,21 +1657,24 @@ def build_history_panel(history_values, title, color, active, session_started_at
     graph_text = Text(graph, style=color, no_wrap=True)
 
     stats = make_stats_table()
-    stats.add_row("Current", Text(f"{current:.3f} W", style=color))
-    stats.add_row("Min", f"{minimum:.3f} W")
-    stats.add_row("Max", f"{maximum:.3f} W")
-    stats.add_row("Avg", f"{average:.3f} W")
+    value_text = Text()
+    value_text.append(f"{current:.3f} W", style=f"bold {color}")
+    value_text.append(f" | {minimum:.3f} W | {maximum:.3f} W | {average:.3f} W")
+    stats.add_row("Cur/Min/Max/Avg", value_text)
     add_delta_rows(stats, delta_mode_filter)
-    stats.add_row("Duration", format_elapsed(session_started_at))
-    stats.add_row("Start %", fmt(session_start_percent, "%", 3))
-    stats.add_row("Current %", fmt(current_percent, "%", 3))
-    stats.add_row("Δ Session", fmt(session_delta_percent, "%", 3))
+    session_text = (f"{fmt(session_start_percent, '%', 3)}"
+        f" → "
+        f"{fmt(current_percent, '%', 3)}"
+        f" ({fmt(session_delta_percent, '%', 3)})"
+    )
+    stats.add_row("Session", session_text,)
+    stats.add_row("Duration",format_elapsed(session_started_at),)
 
-    mode_text = "ACTIVE" if active else "idle"
-    footer = Text(f"{mode_text}  Last update {datetime.now():%H:%M:%S}", style=color if active else "dim")
+    status_icon = "●" if active else "○"
+    panel_title = f"{title} {status_icon}"
+    content = Group(graph_text, stats)
 
-    content = Group(graph_text, "", stats, "", footer)
-    return Panel(content, title=title, border_style=color)
+    return Panel(content, title=panel_title, border_style=color)
 
 
 def build_mode_percent_timeline_panel(data):
@@ -1704,17 +1706,18 @@ def build_mode_percent_timeline_panel(data):
     legend.append(f"({len(valid)} samples)", style="white")
 
     stats = make_stats_table()
-    stats.add_row("Start", first["time"].strftime("%Y-%m-%d %H:%M:%S"))
-    stats.add_row("Since", format_elapsed(first["time"]))
-    stats.add_row("Start %", fmt(first["percent"], "%", 3))
-    stats.add_row("Current %", fmt(last["percent"], "%", 3))
-    stats.add_row("Delta %", fmt(delta, "%", 3))
-    stats.add_row("Mode", Text(mode_label(data["mode"]), style=mode_color(data["mode"])))
+    stats.add_row("Session",(
+        f"{fmt(first['percent'], '%', 3)}"
+        f" → "
+        f"{fmt(last['percent'], '%', 3)}"
+        f" ({fmt(delta, '%', 3)})"    ),)
+    stats.add_row(    "Started",    first["time"].strftime("%H:%M:%S"))
+    stats.add_row(    "Duration",    format_elapsed(first["time"]))
+    stats.add_row(    "Mode",    Text(mode_label(data["mode"]), style=mode_color(data["mode"])))
 
     content = Group(
         Text("Mode    ", style="cyan") + mode_line,
         Text("Battery ", style="cyan") + percent_line,
-        "",
         legend,
         stats,
     )
@@ -1735,9 +1738,9 @@ def build_dashboard_layout(data):
 
     layout["main_dashboard"].split_column(
         Layout(name="row_status", ratio=5, minimum_size=12),
-        Layout(name="row_health", ratio=4, minimum_size=10),
-        Layout(name="row_timeline", ratio=2, minimum_size=8),
-        Layout(name="row_history", ratio=5, minimum_size=11),
+        Layout(name="row_health", ratio=5, minimum_size=12),
+        Layout(name="row_timeline", ratio=2, minimum_size=7),
+        Layout(name="row_history", ratio=2, minimum_size=6),
     )
 
     layout["row_status"].split_row(
