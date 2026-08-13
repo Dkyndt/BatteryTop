@@ -1,4 +1,4 @@
-# BatteryTop v10.3.1
+# BatteryTop v10.3.2
 
 A real-time battery analytics dashboard for Windows laptops that goes far beyond the standard Windows battery indicator.
 
