@@ -1300,9 +1300,14 @@ def fmt_delta_percent(value):
 
 
 def add_delta_rows(stats, mode_filter):
-    stats.add_row("Δ1m", fmt_delta_percent(battery_percent_delta(1, mode_filter)))
-    stats.add_row("Δ5m", fmt_delta_percent(battery_percent_delta(5, mode_filter)))
-    stats.add_row("Δ10m", fmt_delta_percent(battery_percent_delta(10, mode_filter)))
+    delta_1m = fmt_delta_percent(battery_percent_delta(1, delta_mode_filter))
+    delta_5m = fmt_delta_percent(battery_percent_delta(5, delta_mode_filter))
+    delta_10m = fmt_delta_percent(battery_percent_delta(10, delta_mode_filter))
+    
+    stats.add_row(
+        "Δ 1/5/10m",
+        f"{delta_1m} | {delta_5m} | {delta_10m}"
+    )
 
 
 # -----------------------------
