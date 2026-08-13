@@ -227,10 +227,7 @@ Example:
 Formula:
 
 ```text
-Wear %
-=
-(
-Design Capacity - Full Charge Capacity ) / Design Capacity × 100
+Wear % = (Design Capacity - Full Charge Capacity) / Design Capacity × 100
 ```
 
 Example:
@@ -463,9 +460,7 @@ Elapsed session time.
 Formula:
 
 ```text
-Now
--
-Session Start Time
+Now - Session Start Time
 ```
 
 ---
