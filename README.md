@@ -193,7 +193,7 @@ Python 3.11+
 Install dependencies:
 
 ```bash
-pip install rich psutil
+pip install rich psutil pywin32
 ```
 
 ---
