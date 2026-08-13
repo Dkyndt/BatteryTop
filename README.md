@@ -164,5 +164,4 @@ Session information:
 
 Add screenshot here:
 
-```text
 docs/images/dashboard.png
