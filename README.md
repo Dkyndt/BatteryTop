@@ -85,12 +85,7 @@ Current battery charge percentage.
 Formula:
 
 ```text
-Battery %
-=
-Remaining Capacity
-/
-Full Capacity
-× 100
+Battery % = Remaining Capacity / Full Capacity × 100
 ```
 
 ---
@@ -120,9 +115,7 @@ Current charging power.
 Formula:
 
 ```text
-Power (W)
-=
-Voltage × Current
+Power (W) = Voltage × Current
 ```
 
 Positive value during charging.
@@ -136,9 +129,7 @@ Current discharge rate.
 Formula:
 
 ```text
-Power (W)
-=
-Voltage × Current
+Power (W) = Voltage × Current
 ```
 
 Positive value while discharging.
@@ -239,26 +230,17 @@ Formula:
 Wear %
 =
 (
-Design Capacity
--
-Full Charge Capacity
-)
-/
-Design Capacity
-× 100
+Design Capacity - Full Charge Capacity ) / Design Capacity × 100
 ```
 
 Example:
 
 ```text
-Design:
-95 Wh
+Design: 95 Wh
 
-Current:
-85 Wh
+Current: 85 Wh
 
-Wear:
-10.5 %
+Wear: 10.5 %
 ```
 
 ---
@@ -268,22 +250,13 @@ Wear:
 Formula:
 
 ```text
-Health %
-=
-Current Capacity
-/
-Design Capacity
-× 100
+Health % = Current Capacity / Design Capacity × 100
 ```
 
 Example:
 
 ```text
-90 Wh
-/
-100 Wh
-=
-90 %
+90 Wh / 100 Wh = 90 %
 ```
 
 ---
@@ -308,21 +281,13 @@ Uses current instantaneous power.
 Formula:
 
 ```text
-ETA
-=
-Remaining Energy
-/
-Current Power
+ETA = Remaining Energy / Current Power
 ```
 
 Example:
 
 ```text
-90 Wh
-/
-30 W
-=
-3 hours
+90 Wh / 30 W = 3 hours
 ```
 
 Instantaneous but noisy.
@@ -340,11 +305,7 @@ avg_power_1m
 Formula:
 
 ```text
-ETA_1m
-=
-Remaining Energy
-/
-Average Power 1m
+ETA_1m = Remaining Energy / Average Power 1m
 ```
 
 More stable.
@@ -362,11 +323,7 @@ avg_power_5m
 Formula:
 
 ```text
-ETA_5m
-=
-Remaining Energy
-/
-Average Power 5m
+ETA_5m = Remaining Energy / Average Power 5m
 ```
 
 Most stable power-based estimate.
@@ -380,43 +337,25 @@ Uses battery percentage change.
 Formula:
 
 ```text
-Rate (%/h)
-=
-Battery %
-Difference
-/
-Elapsed Time
+Rate (%/h) = Battery % Difference / Elapsed Time
 ```
 
 Example:
 
 ```text
-5%
-in
-30 min
-
-=
-10%/h
+5% in 30 min  = 10%/h
 ```
 
 Then:
 
 ```text
-Time Remaining
-=
-Current %
-/
-Rate
+Time Remaining = Current % / Rate
 ```
 
 or
 
 ```text
-Time To Full
-=
-(100 - Current %)
-/
-Rate
+Time To Full = (100 - Current %) / Rate
 ```
 
 ---
@@ -506,21 +445,13 @@ Tracks the currently active charge or discharge session.
 Displays:
 
 ```text
-Start %
-→
-Current %
-(
-Delta
-)
+Start % → Current % (Delta)
 ```
 
 Example:
 
 ```text
-91.685%
-→
-94.872%
-(+3.187%)
+91.685% → 94.872% (+3.187%)
 ```
 
 ---
@@ -546,11 +477,7 @@ Average charging or discharge power during session.
 Formula:
 
 ```text
-Average
-=
-Sum(Power Samples)
-/
-Sample Count
+Average = Sum(Power Samples) / Sample Count
 ```
 
 ---
@@ -661,17 +588,13 @@ Used for:
 Formula:
 
 ```text
-Current Power
-/
-Average 5m
+Current Power / Average 5m
 ```
 
 Example:
 
 ```text
-50W / 25W
-=
-2.0x
+50W / 25W = 2.0x
 ```
 
 ---
@@ -681,11 +604,7 @@ Example:
 Formula:
 
 ```text
-Current Power
-/
-Average 5m
->
-2.5x
+Current Power / Average 5m > 2.5x
 ```
 
 Default threshold:
@@ -717,9 +636,7 @@ Detects sudden battery percentage drops.
 Default rules:
 
 ```python
-3%
-within
-60 seconds
+3%  within 60 seconds
 ```
 
 ---
@@ -731,9 +648,7 @@ Detects severe drops.
 Default rule:
 
 ```python
-10%
-within
-60 seconds
+10% within 60 seconds
 ```
 
 Useful for:
@@ -799,12 +714,7 @@ Lower battery charge
 Displays:
 
 ```text
-Start %
-→
-Current %
-(
-Delta
-)
+Start % → Current % (Delta)
 ```
 
 ---
@@ -841,10 +751,7 @@ for current mode.
 Formula:
 
 ```text
-Current %
--
-Battery %
-X Minutes Ago
+Current %  - Battery % X Minutes Ago
 ```
 
 Examples:
