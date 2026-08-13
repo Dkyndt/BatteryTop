@@ -16,6 +16,9 @@ BatteryTop provides deep insight into:
 
 The goal of BatteryTop is not only to monitor battery status, but to help users understand how their laptop battery behaves over time and identify degradation, inefficient charging, abnormal discharge patterns and battery calibration issues. 【1-5e7202】
 
+<img width="1888" height="1061" alt="image" src="https://github.com/user-attachments/assets/28b6fefc-9f29-4dd2-b768-1cda90ee8163" />
+
+
 ---
 
 # Features
