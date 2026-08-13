@@ -201,7 +201,7 @@ pip install rich psutil
 ## Running BatteryTop
 
 ```bash
-python BatteryTop_v9_2_AlertsEventsWarnings.py
+python BatteryTop_v9_2.py
 ```
 
 ---
