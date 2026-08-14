@@ -33,6 +33,20 @@
 # - Charge and Discharge histories side-by-side
 # Requirements: pip install rich psutil pywin32
 
+import sys
+import subprocess
+
+REQUIRED_PACKAGES = ["psutil", "rich", "pywin32"]
+
+for package in REQUIRED_PACKAGES:
+    try:
+        __import__(package if package != "pywin32" else "win32api")
+    except ImportError:
+        print(f"[INFO] Installing missing package: {package}")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", package]
+        )
+
 import time
 import csv
 from collections import deque
