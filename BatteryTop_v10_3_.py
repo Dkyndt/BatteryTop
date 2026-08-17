@@ -189,8 +189,10 @@ REFRESH_SECONDS = 1
 HISTORY_LENGTH = 10000
 MAX_REASONABLE_POWER_W = 300.0
 
-BATTERY_CHARGE_ALERT_PERCENT = 80
+BATTERY_CHARGE_ALERT_PERCENT = 80.0
+BATTERY_CHARGE_ALERT_RESET_PERCENT = 78.0
 battery_charge_alert_triggered = False
+general_event_history = deque(maxlen=100)
 
 CSV_LOG_DIR = Path(__file__).resolve().parent / "BatteryLogs"
 CSV_LOG_DIR.mkdir(exist_ok=True)
@@ -522,17 +524,26 @@ def check_charge_target_alert(data):
     if mode == "charge" and percent >= BATTERY_CHARGE_ALERT_PERCENT:
         if not battery_charge_alert_triggered:
             add_event(
-                f"Battery reached {BATTERY_CHARGE_ALERT_PERCENT}%",
-                "yellow"
+                f"Charge target reached: {BATTERY_CHARGE_ALERT_PERCENT:.0f}%",
+                "bold yellow",
+                "charge_target",
             )
 
             console.bell()
-
             battery_charge_alert_triggered = True
 
-    elif percent < BATTERY_CHARGE_ALERT_PERCENT - 2:
+    elif percent < BATTERY_CHARGE_ALERT_RESET_PERCENT:
         battery_charge_alert_triggered = False
 
+
+def add_event(message, style="white", kind="event"):
+    general_event_history.append({
+        "timestamp": datetime.now(),
+        "kind": kind,
+        "label": message,
+        "detail": "",
+        "style": style,
+    })
 
 # -----------------------------
 # Data collection
@@ -1586,6 +1597,15 @@ def build_alerts_events_panel():
             "style": "yellow",
             "event": spike,
         })
+    for event in general_event_history:
+        events.append({
+            "timestamp": event["timestamp"],
+            "kind": event.get("kind", "event"),
+            "label": event.get("label", "Event"),
+            "detail": event.get("detail", ""),
+            "style": event.get("style", "white"),
+            "event": event,
+        })
 
     events = sorted(events, key=lambda item: item["timestamp"], reverse=True)
     latest = events[0] if events else None
@@ -1636,6 +1656,10 @@ def build_alerts_events_panel():
             spike = latest["event"]
             table.add_row("Factor", f"{spike.get('factor'):.2f}x")
             table.add_row("Power", fmt(spike.get("current_power_w"), "W", 3))
+
+        elif latest["kind"] == "charge_target":
+            table.add_row("Target", f"{BATTERY_CHARGE_ALERT_PERCENT:.0f} %")
+            table.add_row("Action", "Disconnect charger")
 
     if drops_today:
         largest_drop = min(event.get("drop_percent") or 0 for event in drops_today)
