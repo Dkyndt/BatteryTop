@@ -1,37 +1,70 @@
-# BatteryTop_v10_3_2_GhostGauge.py
-# Consolidated BatteryTop V7.1
-# Based on BatteryTop V6.3 / V7.0
-# Features:
-# - Moving Average Engine: Avg power 1m / 5m
-# - Stable ETA using 5m average when available
-# - Battery Health dashboard
-# - Two-column dashboard layout
-# - Rich Layout grid engine with aligned panels
-# - Full-width battery charge bar
-# - Equal-height top grid panels
+# BatteryTop_v10_3_3_PowerPlan_Commented.py
+#
+# BatteryTop V10.3.3
+# Real-time Windows battery dashboard for terminal use.
+#
+# This version is based on the BatteryTop V10.x layout and feature set.
+# It combines live Windows battery telemetry, historical sampling,
+# runtime prediction, session analytics, visual battery gauges and CSV logging.
+#
+# Requirements:
+#   pip install rich psutil pywin32
+#
+# Main features:
+# - Real-time battery monitoring through Windows WMI and psutil
+# - Automatic dependency check for required Python packages
+# - Rich terminal dashboard with adaptive layout
+# - Compact dashboard mode for smaller 1920x1080 terminals
+# - Expanded dashboard mode for larger and 4K terminals
+# - Main battery information panel
+# - Battery voltage, current, remaining capacity and full capacity display
+# - Charge and discharge power display
+# - Active power calculation based on current battery mode
+# - Moving average engine for 1-minute and 5-minute power values
+# - Stable ETA calculation using the 5-minute average when available
+# - Runtime prediction for charging and discharging
+# - Battery health dashboard
+# - Battery wear level and health percentage calculation
+# - Battery cycle count display when available
+# - Session analytics for charge and discharge sessions
+# - Corrected percent-based session tracking
+# - Charge session and discharge session statistics
 # - Power spike detection
-# - Session Analytics panel
-# - Right-column sub-layout for Battery Health / Session Analytics / Power Monitor
-# - Charge session logging
-# - Automatic CSV logging
-# - Rebalanced dashboard layout
-# - Runtime Prediction engine
 # - Power spike history logging
-# - Integrated power spike history into Power Monitor
-# - Dynamic charge bar colors below battery thresholds
-# - Battery delta 1m/5m/10m in power history panels
-# - Fixed compact battery delta rows in history panels
-# - Alerts & Events panel with battery drop detection
-# - Uniform layout alignment and compact history panels
-# - Improved Alerts & Events with battery drop warning details
+# - Power monitor panel with recent spike information
+# - Battery drop detection
+# - Alerts & Events panel with warning details
 # - One-sample-per-second history guard
-# - Corrected percent-based session logging
-# - Single full-width mode + percent timeline
+# - Automatic CSV logging to BatteryLogs folder
+# - CSV logging for battery values, runtime values and power plan
+# - Full-width battery mode and percent timeline
 # - Compact one-line timeline legend
+# - Charge and discharge power history panels side-by-side
+# - Battery delta display for 1-minute, 5-minute and 10-minute intervals
+# - Compact delta rows in power history panels
 # - Vertical battery gauge
-# - 10-minute ghost overlay in vertical battery gauge
-# - Charge and Discharge histories side-by-side
-# Requirements: pip install rich psutil pywin32
+# - Dynamic full-height vertical battery gauge
+# - 10-minute ghost overlay in the vertical battery gauge
+# - Active Windows Power Plan display
+# - Color indication for common Windows Power Plans
+# - Extra inline comments explaining important calculations and logic
+#
+# -----------------------------------------------------------------------------
+# HOW TO READ THIS FILE
+# -----------------------------------------------------------------------------
+# BatteryTop is built around one repeating loop:
+#
+# 1. Read live battery values from Windows WMI and psutil.
+# 2. Clean suspicious values so broken WMI readings do not pollute the dashboard.
+# 3. Store one valid sample per second in history buffers.
+# 4. Calculate moving averages, ETA values, session statistics, spikes and drops.
+# 5. Render the updated dashboard using Rich panels.
+# 6. Write sampled values to CSV for later analysis.
+#
+# The comments in this file explain why the most important calculations exist.
+# The goal is to make the script easier to maintain, easier to debug and easier
+# to explain to other users on GitHub.
+# -----------------------------------------------------------------------------
 
 import sys
 import subprocess
@@ -67,10 +100,68 @@ try:
 except ImportError:
     raise SystemExit("Install dependencies first: pip install rich psutil pywin32")
 
+import subprocess
+import re
 
 console = Console()
 
 VIEW_MODE = "AUTO"
+
+
+# -----------------------------
+# Functions
+# -----------------------------
+
+
+def get_power_plan():
+    """Return the active Windows Power Plan name.
+
+    Windows exposes the active power scheme through the built-in command:
+        powercfg /getactivescheme
+
+    Typical output looks like:
+        Power Scheme GUID: ... (Balanced)
+
+    BatteryTop only displays the readable name between brackets. If the command
+    fails, for example on non-Windows systems or restricted environments, the
+    dashboard continues running and shows "Unknown" instead of crashing.
+    """
+    try:
+        result = subprocess.check_output(
+            ["powercfg", "/getactivescheme"],
+            text=True,
+            encoding="utf-8",
+            errors="ignore"
+        )
+        match = re.search(r"\((.*?)\)", result)
+        return match.group(1).strip() if match else "Unknown"
+    except Exception:
+        return "Unknown"
+
+def power_plan_text(plan):
+    """Return a colored Rich Text object for the current power plan.
+
+    The color is only a visual hint:
+    - High / Ultimate performance plans are highlighted red because they can
+      increase power draw.
+    - Balanced is green because it is usually the normal Windows default.
+    - Saver is yellow because it intentionally limits performance to save power.
+    """
+    plan = plan or "Unknown"
+    plan_lower = plan.lower()
+
+    if "ultimate" in plan_lower:
+        color = "bright_red"
+    elif "high" in plan_lower or "performance" in plan_lower:
+        color = "red"
+    elif "balanced" in plan_lower:
+        color = "green"
+    elif "saver" in plan_lower or "bespaar" in plan_lower:
+        color = "yellow"
+    else:
+        color = "cyan"
+
+    return Text(plan, style=color)
 
 def get_view_mode(console):
     width = console.size.width
@@ -97,6 +188,9 @@ def make_stats_table(label_width=LABEL_WIDTH, value_justify="right"):
 REFRESH_SECONDS = 1
 HISTORY_LENGTH = 10000
 MAX_REASONABLE_POWER_W = 300.0
+
+BATTERY_CHARGE_ALERT_PERCENT = 80
+battery_charge_alert_triggered = False
 
 CSV_LOG_DIR = Path(__file__).resolve().parent / "BatteryLogs"
 CSV_LOG_DIR.mkdir(exist_ok=True)
@@ -416,6 +510,29 @@ def downsample_points(points, width):
 
     return sampled
 
+def check_charge_target_alert(data):
+    global battery_charge_alert_triggered
+
+    percent = data.get("percent")
+    mode = data.get("mode")
+
+    if percent is None:
+        return
+
+    if mode == "charge" and percent >= BATTERY_CHARGE_ALERT_PERCENT:
+        if not battery_charge_alert_triggered:
+            add_event(
+                f"Battery reached {BATTERY_CHARGE_ALERT_PERCENT}%",
+                "yellow"
+            )
+
+            console.bell()
+
+            battery_charge_alert_triggered = True
+
+    elif percent < BATTERY_CHARGE_ALERT_PERCENT - 2:
+        battery_charge_alert_triggered = False
+
 
 # -----------------------------
 # Data collection
@@ -434,6 +551,8 @@ def get_data():
     discharging = bool(getattr(status, "Discharging", False)) if status else False
     power_online = bool(getattr(status, "PowerOnline", False)) if status else False
 
+    # WMI reports ChargeRate and DischargeRate in milliwatts. BatteryTop converts
+    # them to watts and rejects impossible values in clean_power_mw().
     charge_power_w = clean_power_mw(getattr(status, "ChargeRate", None)) if status else None
     discharge_power_w = clean_power_mw(getattr(status, "DischargeRate", None)) if status else None
     voltage_v = safe_voltage(getattr(status, "Voltage", None)) if status else None
@@ -477,9 +596,15 @@ def get_data():
     if voltage_v and active_power_w is not None:
         current_a = active_power_w / voltage_v
 
+    # Moving averages smooth short spikes. The 5-minute average is preferred for
+    # ETA because it is more stable than the current one-second power sample.
     avg_power_1m = moving_average_with_current(power_history_1m, active_power_w)
     avg_power_5m = moving_average_with_current(power_history_5m, active_power_w)
     eta_power_w = avg_power_5m if avg_power_5m and avg_power_5m > 0 else active_power_w
+
+    # Store the active Windows Power Plan alongside the battery data so the UI
+    # and CSV log both use the same sampled value for this refresh cycle.
+    power_plan = get_power_plan()
 
     time_to_full_h = None
     time_to_empty_h = None
@@ -518,6 +643,7 @@ def get_data():
         "wear_level": wear_level,
         "health": health,
         "cycle_count": cycle_count,
+        "power_plan": power_plan,
         "time_to_full_h": time_to_full_h,
         "time_to_empty_h": time_to_empty_h,
     }
@@ -528,6 +654,12 @@ def get_data():
 # -----------------------------
 
 def update_histories_and_sessions(data):
+    """Update history buffers and session state once per second.
+
+    The dashboard refreshes visually more often than once per second, but the
+    history buffers are intentionally limited to one sample per second. This
+    prevents duplicate samples from distorting moving averages and timelines.
+    """
     global last_valid_charge_w, last_valid_discharge_w
     global current_mode
     global charge_session_started_at, discharge_session_started_at
@@ -649,6 +781,7 @@ def csv_row(data, now):
         "wear_level_percent": data.get("wear_level"),
         "battery_health_percent": data.get("health"),
         "cycle_count": data.get("cycle_count"),
+        "power_plan": data.get("power_plan"),
         "time_to_full_h": data.get("time_to_full_h"),
         "time_to_empty_h": data.get("time_to_empty_h"),
     }
@@ -1515,6 +1648,12 @@ def build_alerts_events_panel():
 # -----------------------------
 
 def build_battery_panel(data):
+    """Build the main battery information panel.
+
+    This panel combines raw values from Windows with calculated values such as
+    moving averages, active current and ETA. It also shows the active Power Plan
+    because that setting can strongly influence charging and discharging power.
+    """
     table = make_stats_table()
 
     table.add_row("Battery", str(data["battery_name"]))
@@ -1528,6 +1667,10 @@ def build_battery_panel(data):
     table.add_row("Full capacity", fmt(data["full_capacity_wh"], "Wh", 3))
     table.add_row("Cycle count", str(data["cycle_count"]) if data["cycle_count"] is not None else "N/A")
 
+    # The active Windows Power Plan helps explain why power draw changes.
+    # Example: High Performance can raise discharge power, while Power Saver can
+    # reduce it. This is sampled once per refresh in get_data().
+
     time_to_full = format_eta(data.get("time_to_full_h"))
     time_to_empty = format_eta(data.get("time_to_empty_h"))
 
@@ -1540,8 +1683,9 @@ def build_battery_panel(data):
         table.add_row("Time to empty", Text(time_to_empty, style="yellow"))
     else:
         table.add_row("Time to empty", time_to_empty)
+    table.add_row("Power Plan", power_plan_text(data.get("power_plan")))
 
-    return Panel(table, title="BatteryTop V10.3.2 - Dell")
+    return Panel(table, title="BatteryTop V10.3.3 - Dell")
 
 
 def build_battery_health_panel(data):
@@ -1599,26 +1743,43 @@ def build_vertical_battery_panel(data):
     ghost_value = None if ghost_percent is None else max(0.0, min(float(ghost_percent), 100.0))
     delta_10m = None if ghost_value is None else value - ghost_value
 
-    # Dynamic full-height gauge.
-    # Current battery level is rendered as a solid block.
-    # The 10-minute old level is rendered as a dim ghost marker/overlay.
+    # Keep some terminal rows available for value, mode and trend text.
     reserved_rows = 9
     total_rows = max(10, console.size.height - reserved_rows)
+
     filled_rows = int(round((value / 100.0) * total_rows))
     ghost_rows = None if ghost_value is None else int(round((ghost_value / 100.0) * total_rows))
 
     lines = []
-    top_label = Text()
-    top_label.append("100%", style="cyan")
-    lines.append(top_label)
+
+    # Precalculate which row belongs to each 10% tick.
+    # This prevents duplicated or ugly tick labels.
+    tick_rows = {
+        int(round((tick / 100.0) * total_rows)): tick
+        for tick in range(0, 101, 10)
+    }
 
     for row_index in range(total_rows):
         level_from_bottom = total_rows - row_index
+
         filled = level_from_bottom <= filled_rows
         ghost = ghost_rows is not None and level_from_bottom <= ghost_rows
         ghost_edge = ghost_rows is not None and level_from_bottom == ghost_rows
 
+        tick = tick_rows.get(level_from_bottom)
+
         line = Text()
+
+        # Compact scale directly next to the battery.
+        # Example:
+        # 100│█████│
+        #    │█████│
+        #  90│█████│
+        if tick is not None:
+            line.append(f"{tick:>3}", style="cyan")
+        else:
+            line.append("   ")
+
         if ghost_edge:
             line.append("├▒▒▒▒▒┤", style="grey50")
         elif filled:
@@ -1627,11 +1788,8 @@ def build_vertical_battery_panel(data):
             line.append("│▒▒▒▒▒│", style="grey50")
         else:
             line.append("│     │", style="dim")
-        lines.append(line)
 
-    bottom_label = Text()
-    bottom_label.append("  0%", style="cyan")
-    lines.append(bottom_label)
+        lines.append(line)
 
     percent_text = Text(f"{value:>6.2f}%", style=f"bold {color}")
     mode_text = Text(mode_label(data.get("mode")), style=mode_color(data.get("mode")))
@@ -1647,7 +1805,7 @@ def build_vertical_battery_panel(data):
         Group(*lines, "", percent_text, mode_text, trend_text),
         title="Battery",
         border_style=color,
-        padding=(0, 1),
+        padding=(0, 0),
     )
 
 
@@ -1866,7 +2024,9 @@ def build_dashboard_layout(data):
 def ui():
     data = get_data()
     update_histories_and_sessions(data)
+    check_charge_target_alert(data)
     return build_dashboard_layout(data)
+
 
 def main():
     try:
